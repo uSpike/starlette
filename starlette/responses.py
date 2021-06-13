@@ -12,6 +12,11 @@ from urllib.parse import quote
 
 import anyio
 
+if sys.version_info >= (3, 8):
+    from typing import Protocol, runtime_checkable
+else:
+    from typing_extensions import Protocol, runtime_checkable
+
 from starlette.background import BackgroundTask
 from starlette.concurrency import iterate_in_threadpool
 from starlette.datastructures import URL, MutableHeaders
@@ -28,6 +33,29 @@ def guess_type(
     if sys.version_info < (3, 8):  # pragma: no cover
         url = os.fspath(url)
     return mimetypes_guess_type(url, strict)
+
+
+@runtime_checkable
+class ACloseAble(Protocol):
+    async def aclose(self) -> None:
+        ...
+
+
+T = typing.TypeVar("T")
+
+
+class aclosing(typing.Generic[T]):
+    # This is taken from 3.10 contextlib.aclosing and modified to only
+    # call thing.aclose() if it is ACloseAble.
+    def __init__(self, thing: T):
+        self.thing = thing
+
+    async def __aenter__(self) -> T:
+        return self.thing
+
+    async def __aexit__(self, *exc_info: typing.Any) -> None:
+        if isinstance(self.thing, ACloseAble):
+            await self.thing.aclose()
 
 
 class Response:
@@ -209,10 +237,13 @@ class StreamingResponse(Response):
                 "headers": self.raw_headers,
             }
         )
-        async for chunk in self.body_iterator:
-            if not isinstance(chunk, bytes):
-                chunk = chunk.encode(self.charset)
-            await send({"type": "http.response.body", "body": chunk, "more_body": True})
+        async with aclosing(self.body_iterator) as aiter:
+            async for chunk in aiter:
+                if not isinstance(chunk, bytes):
+                    chunk = chunk.encode(self.charset)
+                await send(
+                    {"type": "http.response.body", "body": chunk, "more_body": True}
+                )
 
         await send({"type": "http.response.body", "body": b"", "more_body": False})
 

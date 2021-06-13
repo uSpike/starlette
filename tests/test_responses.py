@@ -310,3 +310,24 @@ def test_head_method():
     client = TestClient(app)
     response = client.head("/")
     assert response.text == ""
+
+
+def test_aclose_body():
+    async def app(scope, receive, send):
+        class ACloseableIterable:
+            async def __aiter__(self):
+                for i in range(5):
+                    yield str(i + 1)
+
+            async def aclose(self):
+                nonlocal aclose_called
+                aclose_called = True
+
+        response = StreamingResponse(ACloseableIterable(), media_type="text/plain")
+        await response(scope, receive, send)
+
+    aclose_called = False
+    client = TestClient(app)
+    response = client.get("/")
+    assert response.text == "12345"
+    assert aclose_called

@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 import anyio
 
-if sys.version_info >= (3, 8):
+if sys.version_info >= (3, 8):  # pragma: no cover
     from typing import Protocol, runtime_checkable
 else:
     from typing_extensions import Protocol, runtime_checkable
@@ -37,7 +37,7 @@ def guess_type(
 
 @runtime_checkable
 class ACloseAble(Protocol):
-    async def aclose(self) -> None:
+    async def aclose(self) -> None:  # pragma: no cover
         ...
 
 
